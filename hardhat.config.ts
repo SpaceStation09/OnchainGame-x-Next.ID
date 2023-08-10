@@ -1,24 +1,26 @@
+import "@nomiclabs/hardhat-ethers";
+import "@nomiclabs/hardhat-etherscan";
+import "@nomiclabs/hardhat-waffle";
+import "@typechain/hardhat";
+import "hardhat-abi-exporter";
 import "hardhat-deploy";
 import "hardhat-deploy-ethers";
-import "@nomiclabs/hardhat-waffle";
-import "@nomiclabs/hardhat-ethers";
-import "solidity-coverage";
 import "hardhat-gas-reporter";
-import "@typechain/hardhat";
-import "@nomiclabs/hardhat-etherscan";
-import "hardhat-abi-exporter";
 import { HardhatUserConfig } from "hardhat/config";
+import "solidity-coverage";
 import {
-  getHardhatNetworkConfig,
-  HardhatSolidityConfig,
-  HardhatGasReporterConfig,
   EtherscanConfig,
+  HardhatGasReporterConfig,
+  HardhatSolidityConfig,
+  getHardhatNetworkConfig,
 } from "./SmartContractProjectConfig/config";
 
 const networks = getHardhatNetworkConfig();
-const solidity = HardhatSolidityConfig;
+let solidity = HardhatSolidityConfig;
 const gasReporter = HardhatGasReporterConfig;
 const etherscan = EtherscanConfig;
+
+solidity.version = "0.8.12";
 
 const config: HardhatUserConfig = {
   networks,
