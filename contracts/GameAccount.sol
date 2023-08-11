@@ -5,10 +5,10 @@ pragma solidity ^0.8.12;
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
-
+import "@openzeppelin/contracts/utils/Strings.sol";
 import "@account-abstraction/contracts/core/BaseAccount.sol";
 import "@account-abstraction/contracts/samples/callback/TokenCallbackHandler.sol";
-import "./NextID/interfaces/IAccessControl.sol";
+import "./interfaces/IAccessControl.sol";
 import "./NextID/lib/Identity.sol";
 
 /**
@@ -27,6 +27,7 @@ contract GameAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Init
 
     event GameAccountInitialized(IEntryPoint indexed entryPoint, address indexed profile, string userName);
     event SwitchProfile(IIdentityGraph indexed _oldProfile, IIdentityGraph indexed _newProfile);
+    event SwitchControlModule(IAccessControl indexed _oldModule, IAccessControl indexed _newModule);
 
     /// @inheritdoc BaseAccount
     function entryPoint() public view virtual override returns (IEntryPoint) {
@@ -89,35 +90,33 @@ contract GameAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Init
      * withdraw value from the account's deposit
      * @param withdrawAddress target to send to
      * @param amount to withdraw
+     * @param signature keyPari sign on withdrawAddress
      */
     function withdrawDepositTo(
         address payable withdrawAddress,
         uint256 amount,
         bytes memory signature
     ) public {
-        if (signature.length == 0) {
-            require(_isAuthorized(msg.sender, "", abi.encode(msg.sender)), "GA: Not Authorized");
-        } else {
-            bytes32 msgHash = keccak256(abi.encodePacked(withdrawAddress));
-            bytes32 msgEthHash = msgHash.toEthSignedMessageHash();
-            address calculatedAddress = msgEthHash.recover(signature);
-            require(_isAuthorized(calculatedAddress, signature, ""), "GA: Not Authorized");
-        }
+        bytes32 msgHash = keccak256(abi.encodePacked(withdrawAddress));
+        bytes32 msgEthHash = msgHash.toEthSignedMessageHash();
+        _requireAuthorized(signature, msgEthHash, 1);
         entryPoint().withdrawTo(withdrawAddress, amount);
     }
 
     function setProfile(IIdentityGraph _newProfile, bytes memory signature) external {
-        address avatarAddr = address(uint160(uint256(keccak256(profile.getAvatar()))));
-        if (signature.length == 0) {
-            require(msg.sender == avatarAddr, "GA: Only avatar can reset profile");
-        } else {
-            bytes32 msgHash = keccak256(abi.encodePacked(_newProfile));
-            bytes32 msgEthHash = msgHash.toEthSignedMessageHash();
-            address calculatedAddress = msgEthHash.recover(signature);
-            require(calculatedAddress == avatarAddr, "GA: Set profile signature invalid");
-        }
+        bytes32 msgHash = keccak256(abi.encodePacked(_newProfile));
+        bytes32 msgEthHash = msgHash.toEthSignedMessageHash();
+        _requireAvatar(signature, msgEthHash);
         emit SwitchProfile(profile, _newProfile);
         profile = _newProfile;
+    }
+
+    function setControlModule(IAccessControl _controlModule, bytes memory signature) external {
+        bytes32 msgHash = keccak256(abi.encodePacked(_controlModule));
+        bytes32 msgEthHash = msgHash.toEthSignedMessageHash();
+        _requireAvatar(signature, msgEthHash);
+        emit SwitchControlModule(controlModule, _controlModule);
+        controlModule = _controlModule;
     }
 
     /**
@@ -135,20 +134,53 @@ contract GameAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Init
         emit GameAccountInitialized(entryPoint(), address(_profile), _userName);
     }
 
-    function _isAuthorizedOrEntryPoint() internal view returns (bool valid) {
-        return msg.sender == address(entryPoint()) || _isAuthorized(msg.sender, "", abi.encode(msg.sender));
+    function _authorizeUpgrade(address newImplementation) internal view override {
+        (newImplementation);
+        _requireAvatar("", "");
     }
 
-    function _isAuthorized(
-        address caller,
+    function _requireAvatar(bytes memory signature, bytes32 msgEthHash) internal view {
+        address avatarAddr = address(uint160(uint256(keccak256(profile.getAvatar()))));
+        if (signature.length == 0) {
+            require(msg.sender == avatarAddr, "GA: Only avatar can reset profile");
+        } else {
+            address calculatedAddress = msgEthHash.recover(signature);
+            require(calculatedAddress == avatarAddr, "GA: Set profile signature invalid");
+        }
+    }
+
+    /**
+     * require the request sender is authorized i.e. satisfy control module or in profile
+     * @param signature request sender sign with their keypair
+     * @param msgEthHash the eth hash of the payload to be signed
+     * @param validationData role-based control related info (used in control module):
+     *          0 - from _isAuthorizedOrEntryPoint()
+     *          1 - from withdrawDepositTo()
+     *          2 - from _validateSignature() for erc4337 userop verification usage
+     */
+    function _requireAuthorized(
         bytes memory signature,
-        bytes memory validationData
-    ) internal view returns (bool valid) {
+        bytes32 msgEthHash,
+        uint256 validationData
+    ) internal view {
+        if (signature.length == 0) {
+            require(_isAuthorized(msg.sender, validationData), "GA: Not authorized");
+        } else {
+            address calculatedAddress = msgEthHash.recover(signature);
+            require(_isAuthorized(calculatedAddress, validationData), "GA: Not authorized");
+        }
+    }
+
+    function _isAuthorizedOrEntryPoint() internal view returns (bool) {
+        return msg.sender == address(entryPoint()) || _isAuthorized(msg.sender, 0);
+    }
+
+    function _isAuthorized(address sender, uint256 validationData) internal view returns (bool) {
         if (address(controlModule) == address(0)) {
-            Identity memory identity = Identity("Ethereum", Strings.toHexString(caller));
+            Identity memory identity = Identity("Ethereum", Strings.toHexString(sender));
             return profile.isIdentityLinked(identity);
         } else {
-            return controlModule.isValid(profile, signature, validationData);
+            return controlModule.isValid(profile, sender, validationData);
         }
     }
 
@@ -160,7 +192,7 @@ contract GameAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Init
     {
         bytes32 hash = userOpHash.toEthSignedMessageHash();
         address calculatedAddress = hash.recover(userOp.signature);
-        bool isValid = _isAuthorized(calculatedAddress, userOp.signature, "");
+        bool isValid = _isAuthorized(calculatedAddress, 2);
         if (!isValid) return SIG_VALIDATION_FAILED;
         return 0;
     }
@@ -175,16 +207,6 @@ contract GameAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Init
             assembly {
                 revert(add(result, 32), mload(result))
             }
-        }
-    }
-
-    function _authorizeUpgrade(address newImplementation) internal view override {
-        (newImplementation);
-        if (address(controlModule) == address(0)) {
-            address avatarAddr = address(uint160(uint256(keccak256(profile.getAvatar()))));
-            require(msg.sender == avatarAddr, "GA: Not Authorized to upgrade");
-        } else {
-            require(controlModule.isAuthorizedToUpgrade(profile, msg.sender), "GA: Not Authorized to upgrade");
         }
     }
 }
