@@ -58,7 +58,7 @@ contract TicTacToe {
         _;
     }
 
-    function newGame(address _player1, address _player2) external {
+    function createNewGame(address _player1, address _player2) external {
         uint256 initialGameBoard = 0 | (1 << 20);
         gameById[gameId] = Game(initialGameBoard, _player1, _player2);
         emit NewGame(gameId, _player1, _player2);
@@ -101,6 +101,11 @@ contract TicTacToe {
             game.gameBoard = game.gameBoard ^ (1 << 19);
             emit Draw(_gameId);
         }
+        gameById[_gameId] = game;
+    }
+
+    function getCurrentBoard(uint256 _gameId) public view returns (uint256) {
+        return gameById[_gameId].gameBoard;
     }
 
     function _checkState(uint256 _playerId, uint256 _gameBoard) internal pure returns (uint256) {
