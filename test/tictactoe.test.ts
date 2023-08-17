@@ -1,4 +1,5 @@
 import { EntryPoint, EntryPoint__factory } from "@account-abstraction/contracts";
+import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { expect } from "chai";
 import { BigNumber, Signer, Wallet, utils } from "ethers";
 import { SigningKey } from "ethers/lib/utils";
@@ -15,14 +16,13 @@ import {
   TicTacToe__factory,
 } from "../types";
 import { ONE_ETH } from "./constants";
-import { signUserOp } from "./userOpUtils";
+import { estimateGas, fillUserOPDefaults, signUserOp } from "./userOpUtils";
 import {
   Action,
   IdentityStruct,
-  UserOperation,
   calculateMsgHash,
+  checkBoard,
   createAvatarKeyPair,
-  fillUserOPDefaults,
   revertToSnapShot,
   takeSnapshot,
 } from "./utils";
@@ -108,6 +108,33 @@ describe("TicTacToe Test", () => {
     await profile.setIdentityForDemo(sessionKeyIdentity, signature);
     //#endregion
 
+    const gasUsed = await scPlayerMove(0, 0);
+    console.log("GameAccount gasUsed to make a move: ", gasUsed.toString());
+    const currentGameBoard = await ticTacToe.getCurrentBoard(0);
+    let { player1Turn, state } = checkBoard(currentGameBoard.toNumber());
+    expect(player1Turn).to.be.eq(false);
+    expect(state).to.be.eq(0);
+
+    await ticTacToe.connect(player2).makeMove(1, 0);
+    const gasUsed2 = await scPlayerMove(3, 0);
+    console.log("GameAccount gasUsed to make a move: ", gasUsed2.toString());
+    await ticTacToe.connect(player2).makeMove(4, 0);
+
+    const gasUsed3 = await scPlayerMove(6, 0);
+    console.log("GameAccount gasUsed to make a move: ", gasUsed3.toString());
+
+    const currentGameBoard2 = await ticTacToe.getCurrentBoard(0);
+    state = checkBoard(currentGameBoard2.toNumber()).state;
+    expect(state).to.be.eq(1);
+  });
+
+  it("exceptional case", async () => {
+    // Not authorized sessionKey
+    // GameID: 0; Player1: scPlayer; Player2: player2
+    await ticTacToe.createNewGame(scPlayer.address, player2Address);
+
+    sessionKey = Wallet.createRandom();
+
     let userOp = fillUserOPDefaults({ sender: scPlayer.address });
     userOp.nonce = (await scPlayer.getNonce()).toNumber();
     const execMove = ticTacToe.interface.encodeFunctionData("makeMove", [0, 0]);
@@ -115,10 +142,9 @@ describe("TicTacToe Test", () => {
     userOp = await estimateGas(userOp, entryPoint.address);
     const chainId = network.config.chainId ?? 0;
     userOp = signUserOp(userOp, sessionKey, entryPoint.address, chainId);
-
-    const moveTx = await entryPoint.connect(deployer).handleOps([userOp], await deployer.getAddress());
-    const moveReceipt = await ethers.provider.getTransactionReceipt(moveTx.hash);
-    console.log("GameAccount gasUsed to make a move: ", moveReceipt.gasUsed.toString());
+    await expect(entryPoint.connect(deployer).handleOps([userOp], await deployer.getAddress()))
+      .to.be.revertedWithCustomError(entryPoint, "FailedOp")
+      .withArgs(anyValue, "AA24 signature error");
   });
 
   async function createGameAccount(
@@ -137,21 +163,17 @@ describe("TicTacToe Test", () => {
     };
   }
 
-  async function estimateGas(userOp: UserOperation, entryPointAddr: string): Promise<UserOperation> {
-    let verificationGas = 100000;
-    if (userOp.initCode.length > 0) {
-      verificationGas += 3200 + 200 * userOp.initCode.length;
-    }
-    userOp.verificationGasLimit = verificationGas;
-    const estimatedGas =
-      (
-        await ethers.provider.estimateGas({
-          from: entryPointAddr,
-          to: userOp.sender,
-          data: userOp.callData,
-        })
-      ).toNumber() * 1.5;
-    userOp.callGasLimit = BigNumber.from(Math.floor(estimatedGas));
-    return userOp;
+  async function scPlayerMove(move: number, gameId: number): Promise<BigNumber> {
+    let userOp = fillUserOPDefaults({ sender: scPlayer.address });
+    userOp.nonce = (await scPlayer.getNonce()).toNumber();
+    const execMove = ticTacToe.interface.encodeFunctionData("makeMove", [move, gameId]);
+    userOp.callData = scPlayer.interface.encodeFunctionData("execute", [ticTacToe.address, 0, execMove]);
+    userOp = await estimateGas(userOp, entryPoint.address);
+    const chainId = network.config.chainId ?? 0;
+    userOp = signUserOp(userOp, sessionKey, entryPoint.address, chainId);
+
+    const moveTx = await entryPoint.connect(deployer).handleOps([userOp], await deployer.getAddress());
+    const moveReceipt = await ethers.provider.getTransactionReceipt(moveTx.hash);
+    return moveReceipt.gasUsed;
   }
 });
