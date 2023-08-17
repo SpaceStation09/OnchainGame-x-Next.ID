@@ -1,27 +1,17 @@
-# Hardhat Template
+# OnChain Game x Next.ID
 
-To develop a hardhat contract project, we always need some frequently used dependencies which are not included in the basic hardhat project. Furthermore, we also need several tools to unify the coding style between collaborative workers. In fact, these pre-requisite are always configured similarly in different projects. So, I established this template to help us start a hardhat project in a more convenient way.
+This project aims to create a poc of application for next.id onchain proofService in onchain game scenario. We basically combine our `Identity Graph` scheme with the ERC4337 smart contract wallet to involve any onchain game as a game account.
 
-## Start
+## Overview
 
-### Install dependencies
+You could check the general explanation of the entire system in [Overview](docs/introduction.md).
 
-```shell
-npm install
-```
+## Gas Report
 
-### Get extensions
+To test gas, I developed a tic tac toe game. The recorded average gas used amount is listed below:
 
-Recommend extensions are listed in the file `./.vscode/extensions.json`. If you go to vscode extension list, you could see all recommended extensions directly.
-
-### Final step
-
-Now you can start your development!
-
-## Contribute
-
-Any contribution is welcomed to make it better.
-
-If you have any questions, please create an [issue](https://github.com/SpaceStation09/hardhat-template/issues).
+|      |  EOA  | Game Account | Game Account with Control Module |
+| ---- | :---: | :----------: | :------------------------------: |
+| move | 33975 |    120396    |               N/A                |
 
 **Enjoy!**
