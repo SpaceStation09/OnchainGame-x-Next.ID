@@ -13,6 +13,7 @@ export async function revertToSnapShot(id: string) {
 export interface IdentityStruct {
   platform: string;
   identityValue: string;
+  chainIdentity: string;
 }
 
 export enum Action {
@@ -26,7 +27,10 @@ export const createAvatarKeyPair = (): SigningKey => {
 };
 
 export const calculateMsgHash = (identity: IdentityStruct, action: Action): BytesLike => {
-  return ethers.utils.solidityPack(["string", "string", "uint8"], [identity.platform, identity.identityValue, action]);
+  return ethers.utils.solidityPack(
+    ["string", "string", "address", "uint8"],
+    [identity.platform, identity.identityValue, identity.chainIdentity, action],
+  );
 };
 
 // state: 1 for player1 win; 2 for player 2 win; 0 for ongoing game; 3 for draw

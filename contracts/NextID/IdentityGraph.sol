@@ -30,7 +30,7 @@ contract IdentityGraph is IIdentityGraph {
     // FIXME: This is only for demo usage !!! DO NOT use it in production!!!!
     function setIdentityForDemo(Identity memory identity, bytes memory signature) external {
         require(_verifySignature(identity, Action.Create, signature), "Identity Graph: Wrong avatar");
-        bytes32 identityHash = keccak256(abi.encodePacked(identity.platform, identity.identityValue));
+        bytes32 identityHash = _hashIdentity(identity);
         require(bytes(identityDetail[identityHash].platform).length == 0, "Duplicate Identity");
 
         bytes32[] storage hashArray = neighborsByPlatform[identity.platform];
@@ -45,7 +45,7 @@ contract IdentityGraph is IIdentityGraph {
         require(this.isIdentityLinked(identity), "Identity Graph: Not linked identity");
 
         bytes32[] storage hashArray = neighborsByPlatform[identity.platform];
-        bytes32 identityHash = keccak256(abi.encodePacked(identity.platform, identity.identityValue));
+        bytes32 identityHash = _hashIdentity(identity);
         for (uint256 i = 0; i < hashArray.length; i++) {
             if (hashArray[i] == identityHash) hashArray[i] = hashArray[hashArray.length - 1];
         }
@@ -71,10 +71,22 @@ contract IdentityGraph is IIdentityGraph {
     }
 
     function isIdentityLinked(Identity memory identity) external view returns (bool linked) {
-        bytes32 identityHash = keccak256(abi.encodePacked(identity.platform, identity.identityValue));
+        bytes32 identityHash = _hashIdentity(identity);
         Identity memory recordedIdentity = identityDetail[identityHash];
         if (_equals(recordedIdentity.platform, "")) return false;
         return true;
+    }
+
+    function isChainIdentityLinked(address sessionKey) external view returns (bool linked) {
+        bytes32 identityHash = keccak256(abi.encodePacked("Ethereum", sessionKey));
+        if (identityDetail[identityHash].chainIdentity == address(0)) return false;
+        return true;
+    }
+
+    function _hashIdentity(Identity memory identity) internal pure returns (bytes32) {
+        if (identity.chainIdentity == address(0))
+            return keccak256(abi.encodePacked(identity.platform, identity.identityValue));
+        return keccak256(abi.encodePacked(identity.platform, identity.chainIdentity));
     }
 
     function _equals(string memory a, string memory b) internal pure returns (bool) {
@@ -91,7 +103,9 @@ contract IdentityGraph is IIdentityGraph {
         bytes memory signature
     ) internal view returns (bool) {
         address avatarAddr = _calculateAddress(avatar);
-        bytes32 msgHash = keccak256(abi.encodePacked(identity.platform, identity.identityValue, action));
+        bytes32 msgHash = keccak256(
+            abi.encodePacked(identity.platform, identity.identityValue, identity.chainIdentity, action)
+        );
         bytes memory prefix = "\x19Ethereum Signed Message:\n32";
         bytes32 prefixedHash = keccak256(abi.encodePacked(prefix, msgHash));
         address calculatedVerifier = ECDSA.recover(prefixedHash, signature);

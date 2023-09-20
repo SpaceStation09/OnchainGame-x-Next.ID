@@ -10,8 +10,8 @@ You could check the general explanation of the entire system in [Overview](docs/
 
 To test gas, I developed a tic tac toe game. The recorded average gas used amount is listed below:
 
-|      |  EOA  | Game Account | Game Account with Control Module |
-| ---- | :---: | :----------: | :------------------------------: |
-| move | 33975 |    120396    |               N/A                |
+|      |  EOA  | Game Account |
+| ---- | :---: | :----------: |
+| move | 33975 |    98398     |
 
 **Enjoy!**

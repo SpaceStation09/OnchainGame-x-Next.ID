@@ -13,4 +13,6 @@ interface IIdentityGraph {
     function getIdentityByHash(bytes32 identityHash) external view returns (Identity memory identity);
 
     function isIdentityLinked(Identity memory identity) external view returns (bool linked);
+
+    function isChainIdentityLinked(address sessionKey) external view returns (bool linked);
 }

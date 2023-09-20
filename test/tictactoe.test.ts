@@ -101,7 +101,8 @@ describe("TicTacToe Test", () => {
     const signingWallet = new Wallet(avatarKeyPair.privateKey);
     const sessionKeyIdentity: IdentityStruct = {
       platform: "Ethereum",
-      identityValue: sessionKey.address.toLowerCase(),
+      identityValue: "",
+      chainIdentity: sessionKey.address.toLowerCase(),
     };
     const msgHashSessionKey = utils.keccak256(calculateMsgHash(sessionKeyIdentity, Action.create));
     const signature = await signingWallet.signMessage(utils.arrayify(msgHashSessionKey));

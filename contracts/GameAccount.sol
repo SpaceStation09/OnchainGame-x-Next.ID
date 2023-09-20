@@ -8,8 +8,8 @@ import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@account-abstraction/contracts/core/BaseAccount.sol";
 import "@account-abstraction/contracts/samples/callback/TokenCallbackHandler.sol";
-import "./interfaces/IAccessControl.sol";
 import "./NextID/lib/Identity.sol";
+import "./NextID/interfaces/IIdentityGraph.sol";
 
 /**
  * Game account.
@@ -21,13 +21,12 @@ contract GameAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Init
     using ECDSA for bytes32;
 
     IIdentityGraph public profile;
-    IAccessControl private controlModule;
+    address public avatarAddr;
     string public userName;
     IEntryPoint private immutable _entrypoint;
 
     event GameAccountInitialized(IEntryPoint indexed entryPoint, address indexed profile, string userName);
     event SwitchProfile(IIdentityGraph indexed _oldProfile, IIdentityGraph indexed _newProfile);
-    event SwitchControlModule(IAccessControl indexed _oldModule, IAccessControl indexed _newModule);
 
     /// @inheritdoc BaseAccount
     function entryPoint() public view virtual override returns (IEntryPoint) {
@@ -99,24 +98,16 @@ contract GameAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Init
     ) public {
         bytes32 msgHash = keccak256(abi.encodePacked(withdrawAddress));
         bytes32 msgEthHash = msgHash.toEthSignedMessageHash();
-        _requireAuthorized(signature, msgEthHash, 1);
+        require(_isAvatar(signature, msgEthHash), "GA: Not Avatar");
         entryPoint().withdrawTo(withdrawAddress, amount);
     }
 
     function setProfile(IIdentityGraph _newProfile, bytes memory signature) external {
         bytes32 msgHash = keccak256(abi.encodePacked(_newProfile));
         bytes32 msgEthHash = msgHash.toEthSignedMessageHash();
-        _requireAvatar(signature, msgEthHash);
+        require(_isAvatar(signature, msgEthHash), "GA: Not Avatar");
         emit SwitchProfile(profile, _newProfile);
         profile = _newProfile;
-    }
-
-    function setControlModule(IAccessControl _controlModule, bytes memory signature) external {
-        bytes32 msgHash = keccak256(abi.encodePacked(_controlModule));
-        bytes32 msgEthHash = msgHash.toEthSignedMessageHash();
-        _requireAvatar(signature, msgEthHash);
-        emit SwitchControlModule(controlModule, _controlModule);
-        controlModule = _controlModule;
     }
 
     /**
@@ -130,58 +121,29 @@ contract GameAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Init
 
     function _initialize(IIdentityGraph _profile, string memory _userName) internal virtual {
         profile = _profile;
+        avatarAddr = address(uint160(uint256(keccak256(profile.getAvatar()))));
         userName = _userName;
         emit GameAccountInitialized(entryPoint(), address(_profile), _userName);
     }
 
+    //TBD: require avatar to be msg.sender
     function _authorizeUpgrade(address newImplementation) internal view override {
         (newImplementation);
-        _requireAvatar("", "");
+        require(_isAvatar("", ""), "GA: Not Avatar");
     }
 
-    function _requireAvatar(bytes memory signature, bytes32 msgEthHash) internal view {
-        address avatarAddr = address(uint160(uint256(keccak256(profile.getAvatar()))));
-        if (signature.length == 0) {
-            require(msg.sender == avatarAddr, "GA: Only avatar can reset profile");
-        } else {
-            address calculatedAddress = msgEthHash.recover(signature);
-            require(calculatedAddress == avatarAddr, "GA: Set profile signature invalid");
-        }
-    }
-
-    /**
-     * require the request sender is authorized i.e. satisfy control module or in profile
-     * @param signature request sender sign with their keypair
-     * @param msgEthHash the eth hash of the payload to be signed
-     * @param validationData role-based control related info (used in control module):
-     *          0 - from _isAuthorizedOrEntryPoint()
-     *          1 - from withdrawDepositTo()
-     *          2 - from _validateSignature() for erc4337 userop verification usage
-     */
-    function _requireAuthorized(
-        bytes memory signature,
-        bytes32 msgEthHash,
-        uint256 validationData
-    ) internal view {
-        if (signature.length == 0) {
-            require(_isAuthorized(msg.sender, validationData), "GA: Not authorized");
-        } else {
-            address calculatedAddress = msgEthHash.recover(signature);
-            require(_isAuthorized(calculatedAddress, validationData), "GA: Not authorized");
-        }
+    function _isAvatar(bytes memory signature, bytes32 msgEthHash) internal view returns (bool) {
+        address caller = signature.length == 0 ? msg.sender : msgEthHash.recover(signature);
+        return caller == avatarAddr;
     }
 
     function _isAuthorizedOrEntryPoint() internal view returns (bool) {
-        return msg.sender == address(entryPoint()) || _isAuthorized(msg.sender, 0);
+        return msg.sender == address(entryPoint()) || _isAuthorized(msg.sender);
     }
 
-    function _isAuthorized(address sender, uint256 validationData) internal view returns (bool) {
-        if (address(controlModule) == address(0)) {
-            Identity memory identity = Identity("Ethereum", Strings.toHexString(sender));
-            return profile.isIdentityLinked(identity);
-        } else {
-            return controlModule.isValid(profile, sender, validationData);
-        }
+    function _isAuthorized(address sender) internal view returns (bool) {
+        bool isInProfile = profile.isChainIdentityLinked(sender);
+        return avatarAddr == sender || isInProfile;
     }
 
     function _validateSignature(UserOperation calldata userOp, bytes32 userOpHash)
@@ -192,7 +154,7 @@ contract GameAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Init
     {
         bytes32 hash = userOpHash.toEthSignedMessageHash();
         address calculatedAddress = hash.recover(userOp.signature);
-        bool isValid = _isAuthorized(calculatedAddress, 2);
+        bool isValid = _isAuthorized(calculatedAddress);
         if (!isValid) return SIG_VALIDATION_FAILED;
         return 0;
     }
