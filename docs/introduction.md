@@ -1,3 +1,3 @@
 # Overview
 
-![structure](./structure.jpg)
+![structure](./GameAccount.png)
