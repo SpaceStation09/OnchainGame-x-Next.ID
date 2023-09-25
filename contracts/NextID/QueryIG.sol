@@ -33,7 +33,7 @@ contract QueryIdentityGraph {
         uint256 count;
 
         IIdentityGraph ig = getIdentityGraph(avatar);
-        uint256 totalLen = ig.getTotalIdentityAmount();
+        uint256 totalLen = ig.getIdentityAmount(platform);
         Identity[] memory returnedIdentitityList = new Identity[](totalLen);
         for (i = 0; i < platform.length; i++) {
             identitiesHashList = ig.getAllNeighborsByPlatform(platform[i]);

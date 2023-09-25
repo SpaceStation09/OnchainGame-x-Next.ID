@@ -6,7 +6,7 @@ import "../lib/Identity.sol";
 interface IIdentityGraph {
     function getAvatar() external view returns (bytes memory);
 
-    function getTotalIdentityAmount() external view returns (uint256);
+    function getIdentityAmount(string[] memory platforms) external view returns (uint256);
 
     function getAllNeighborsByPlatform(string memory platform) external view returns (bytes32[] memory neighbors);
 

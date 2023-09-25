@@ -18,7 +18,6 @@ contract IdentityGraph is IIdentityGraph {
     }
     // identity graph merkle tree root
     // bytes32 public merkleTreeRoot;
-    uint256 public totalIdentityAmount = 0;
     bytes public avatar;
     mapping(string => bytes32[]) public neighborsByPlatform;
     mapping(bytes32 => Identity) public identityDetail;
@@ -36,7 +35,6 @@ contract IdentityGraph is IIdentityGraph {
         bytes32[] storage hashArray = neighborsByPlatform[identity.platform];
         hashArray.push(identityHash);
         identityDetail[identityHash] = identity;
-        totalIdentityAmount++;
     }
 
     // FIXME: This is only for demo usage !!! DO NOT use it in production!!!!
@@ -51,15 +49,17 @@ contract IdentityGraph is IIdentityGraph {
         }
         hashArray.pop();
         delete identityDetail[identityHash];
-        totalIdentityAmount--;
     }
 
     function getAvatar() external view returns (bytes memory) {
         return avatar;
     }
 
-    function getTotalIdentityAmount() external view returns (uint256) {
-        return totalIdentityAmount;
+    function getIdentityAmount(string[] memory platforms) external view returns (uint256 amount) {
+        for (uint256 i = 0; i < platforms.length; i++) {
+            amount += neighborsByPlatform[platforms[i]].length;
+        }
+        return amount;
     }
 
     function getAllNeighborsByPlatform(string memory platform) external view returns (bytes32[] memory neighbors) {

@@ -142,8 +142,8 @@ contract GameAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Init
     }
 
     function _isAuthorized(address sender) internal view returns (bool) {
-        bool isInProfile = profile.isChainIdentityLinked(sender);
-        return avatarAddr == sender || isInProfile;
+        if (avatarAddr == sender) return true;
+        return profile.isChainIdentityLinked(sender);
     }
 
     function _validateSignature(UserOperation calldata userOp, bytes32 userOpHash)
