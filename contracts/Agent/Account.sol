@@ -111,7 +111,7 @@ contract Account is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Initiali
     }
 
     function _isAuthorizedOrEntryPoint(bytes memory func) internal view returns (bool) {
-        return msg.sender == address(entryPoint()) || _isAuthorized(msg.sender, func);
+        return msg.sender == address(entryPoint()) || msg.sender == avatarAddr || _isAuthorized(msg.sender, func);
     }
 
     function _isAvatar(bytes memory signature, bytes32 msgEthHash) internal view returns (bool) {
