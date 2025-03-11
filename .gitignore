@@ -10,3 +10,4 @@ artifacts/
 .openzeppelin/
 .env
 types/
+.DS_Store
